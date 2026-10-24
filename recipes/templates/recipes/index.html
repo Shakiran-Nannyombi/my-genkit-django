@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bargain Chef</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Georgia, serif;
+      background: #f4f1ea;
+      color: #1c1915;
+    }
+    main {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    h1 { margin-bottom: 0.25rem; }
+    p { line-height: 1.5; }
+    form { display: flex; gap: 0.5rem; margin: 1.5rem 0; }
+    input {
+      flex: 1;
+      font: inherit;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid #c8c0b4;
+      border-radius: 6px;
+      background: white;
+    }
+    button {
+      font: inherit;
+      padding: 0.6rem 1rem;
+      border: 0;
+      border-radius: 6px;
+      background: #1c1915;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .error { color: #8f1d1d; }
+    .card {
+      background: white;
+      border: 1px solid #e4ddd2;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+    li { margin: 0.25rem 0; }
+    .sale { color: #1d6b3a; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Bargain Chef</h1>
+    <p>Tell it what you feel like eating. It will look up today’s grocery sales and suggest one recipe.</p>
+    <form id="chef-form">
+      <input id="craving" name="craving" value="something warm with chicken" required>
+      <button type="submit">Cook</button>
+    </form>
+    <div id="status"></div>
+    <div id="recipe"></div>
+  </main>
+  <script>
+    const form = document.getElementById('chef-form');
+    const craving = document.getElementById('craving');
+    const status = document.getElementById('status');
+    const recipe = document.getElementById('recipe');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      status.textContent = 'Asking Gemini for a recipe…';
+      status.className = '';
+      recipe.innerHTML = '';
+      try {
+        const response = await fetch('/bargainChefFlow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { craving: craving.value } }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.message || 'The recipe request failed.');
+        }
+        status.textContent = '';
+        recipe.innerHTML = renderRecipe(payload.result);
+      } catch (error) {
+        status.textContent = error.message;
+        status.className = 'error';
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    function renderRecipe(result) {
+      const ingredients = (result.ingredients || []).map((item) =>
+        `<li>${escapeHtml(item.quantity)} ${escapeHtml(item.name)}${item.on_sale ? ' <span class="sale">on sale</span>' : ''}</li>`
+      ).join('');
+      const steps = (result.steps || []).map((step) => `<li>${escapeHtml(step)}</li>`).join('');
+      return `
+        <article class="card">
+          <h2>${escapeHtml(result.title || 'Recipe')}</h2>
+          <p>${escapeHtml(result.description || '')}</p>
+          <p>Servings: ${escapeHtml(String(result.servings ?? ''))}</p>
+          <h3>Ingredients</h3>
+          <ul>${ingredients}</ul>
+          <h3>Steps</h3>
+          <ol>${steps}</ol>
+        </article>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+  </script>
+</body>
+</html>

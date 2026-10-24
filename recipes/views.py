@@ -1,12 +1,18 @@
-from django.http import JsonResponse
 from datetime import datetime
 from typing import Literal
+
+from django.http import HttpResponse
+from django.template.loader import render_to_string
 
 from pydantic import BaseModel, Field
 
 from genkit import ActionRunContext, Genkit
 from genkit_django import genkit_django_handler
 from genkit_google_genai import GoogleAI
+
+def index(request):
+    return HttpResponse(render_to_string('recipes/index.html'))
+
 
 ai = Genkit(
     plugins=[GoogleAI()],
@@ -82,7 +88,7 @@ async def bargain_chef_flow(
         ),
         tools=[get_ingredients_on_sale],
         output_schema=Recipe,
-        config={'temperature': 0.7, 'thinkingConfig': {'thinkingLevel': 'MINIMAL'}},
+        config={'temperature': 0.7},
     )
 
     async for chunk in stream_response.stream:
@@ -91,5 +97,8 @@ async def bargain_chef_flow(
 
     response = await stream_response.response
     if not response.output:
-        raise ValueError('Failed to generate recipe')
+        detail = response.finish_message
+        if not detail and response.error is not None:
+            detail = getattr(response.error, 'message', None) or str(response.error)
+        raise ValueError(detail or 'Failed to generate recipe')
     return response.output
